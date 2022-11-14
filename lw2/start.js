@@ -4,15 +4,14 @@ const { ElGamal, Alphabet } = require('./elgamal.js');
 
 class Voter {
     #theirKeys;
-    #theirBuileten;
-    #hashedBuileten;
-        constructor(name, age, id, theirCVK, vote) {
-        this.name = name;
-        this.age = age;
+        constructor(id, vote, candidates) {
+        //this.name = name;
+        //this.age = age;
         this.id = id;
-        this.theirCVK = theirCVK;
+        //this.theirCVK = theirCVK;
         //this.message = message;
         this.vote = vote;
+        this.candidates = candidates;
         this.#theirKeys = { };
         this.#theirBuileten = {
             // signa: { signature and public key of RSA sign } OBJECT
@@ -22,9 +21,9 @@ class Voter {
         this.#package = [];
     }
 
-    givePrivateKey() {
-        return this.#theirKeys.publicRSAKey;
-    }
+    // givePrivateKey() {
+    //     return this.#theirKeys.privateRSAKey;
+    // }
 
     #generateKeys() {
         const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048});
@@ -32,18 +31,18 @@ class Voter {
         this.#theirKeys.privateRSAKey = privateKey;  
     }
 
-    formPackage(candidates) {
+    formPackage() {
         this.#package = [...Array(10).keys].map((v) => {
             return {
                 packageNumber: v,
                 bul1: {
                     id : this.id,
-                    candidate: candidates[0],
+                    candidate: this.candidates[0],
                     vote: this.vote[0]
                 },
                 bul2: {
                     id : this.id,
-                    candidate: candidates[1],
+                    candidate: this.candidates[1],
                     vote: this.vote[1]
                 }
             }
@@ -52,7 +51,9 @@ class Voter {
 
     #rsaEncryption() {
         this.#generateKeys();
+        console.log("Keys generated");
         this.formPackage();
+        console.log("package formed");
         this.#package.map((v) => {
             v.bul1.vote = crypto.publicEncrypt(
                 {
@@ -68,46 +69,30 @@ class Voter {
                     padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
                     oaepHash: "sha256",
                 },
-                Buffer.from(v.bul1.vote)
+                Buffer.from(v.bul2.vote)
             );
-        })
+        })  
     }
 
     deliverPackage() {
         this.#rsaEncryption();
-        return this.#package
+        console.log("Package messages encrypted");
+        return {
+            pKey: this.#deliverKey(),
+            package: this.#package
+        }
     }
- 
-    // #signBuileten() {
-    //     this.#generatePublicKey();
-    //     const verifiableData = this.name;
-    //     const signature = crypto.sign("sha256", Buffer.from(verifiableData), {
-    //         key: this.#theirKeys.privateRSAKey,
-    //         padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-    //     });
-          
-    //       this.#theirBuileten.signa = {
-    //         theirSign: signature,
-    //         theirPKey: this.#theirKeys.publicRSAKey
-    //       }
-    // }
 
-    // #elGamalizeBuileten(channels) {
-    //     const hashedMessage = channels.ch1.encrypt(this.message, channels.ch2.pubKey);
-    //     this.#hashedBuileten = hashedMessage;
-    //     this.#theirBuileten.buileten = this.#hashedBuileten;
-    // }
-
-    // sendBuileten(channels) {
-    //     this.#signBuileten();
-    //     this.#elGamalizeBuileten(channels);
-    //     return this.#theirBuileten;
-    // }
+    #deliverKey() {
+        return this.#theirKeys.privateRSAKey;
+    }
 }
 
 
 class CVK {
     #listOfVoters;
+    #statistic;
+    #currentPackage;
     constructor(nameOfCVK) {
         this.nameOfCVK = nameOfCVK;
         this.listOfCandidates = [
@@ -124,141 +109,162 @@ class CVK {
             {
                 name: "Maria Andrushko",
                 age: 18,
-                channels: {
-                    ch1: ElGamal(Alphabet, 19),
-                    ch2: ElGamal(Alphabet, 19)
-                },
-                id: 123456789
+                id: 123456789,
+                pkey: "",
+                status: ""
             },
             {
                 name: "Pavlo Stonkevych",
                 age: 21,
-                channels: {
-                    ch1: ElGamal(Alphabet, 27),
-                    ch2: ElGamal(Alphabet, 27)
-                },
-                id: 987654321
+                id: 987654321,
+                pkey: "",
+                status: ""
             },
             {
                 name: "Yakym Galayda",
                 age: 19,
-                channels: {
-                    ch1: ElGamal(Alphabet, 26),
-                    ch2: ElGamal(Alphabet, 26)
-                },
-                id: 123465798
+                
+                id: 123465798,
+                pkey: "",
+                status: ""
             },
             {
                 name: "Oksana Styslo",
                 age: 42,
-                channels: {
-                    ch1: ElGamal(Alphabet, 15),
-                    ch2: ElGamal(Alphabet, 15)
-                },
-                id: 142536798
+                
+                id: 142536798,
+                pkey: "",
+                status: ""
             },
             {
                 name: "Vasylyna Prybylo",
                 age: 67,
-                channels: {
-                    ch1: ElGamal(Alphabet, 18),
-                    ch2: ElGamal(Alphabet, 18)
-                },
-                id: 82365791
+                
+                id: 82365791,
+                pkey: "",
+                status: ""
             },
             {
                 name: "Vadym Detec",
                 age: 31,
-                channels: {
-                    ch1: ElGamal(Alphabet, 24),
-                    ch2: ElGamal(Alphabet, 24)
-                },
-                id: 143675289
+                id: 143675289,
+                pkey: "",
+                status: ""
             },
             {
                 name: "Anna Yaroslavna",
                 age: 990,
-                channels: {
-                    ch1: ElGamal(Alphabet, 11),
-                    ch2: ElGamal(Alphabet, 11)
-                },
-                id: 173946825
+                id: 173946825,
+                pkey: "",
+                status: ""
             },
             {
                 name: "Dmytrii Karpeka",
                 age: 20,
-                channels: {
-                    ch1: ElGamal(Alphabet, 62),
-                    ch2: ElGamal(Alphabet, 62)
-                },
-                id: 741236985
+                id: 741236985,
+                pkey: "",
+                status: ""
             }];
+
+        this.#statistic = {
+            "Possible voters": this.#listOfVoters.length,
+            "Voted successfully": 0,
+            "Ignored voting": 0,
+            "Voted incorrectly": 0,
+            "Missed correct ID and same ID in all builetens": 0,
+            "Attempt to vote second time": 0
+        }
+
+        this.#currentPackage = {};
+    }
+
+
+    receivePackage(packageObject) {
+        this.#currentPackage = packageObject.package.slice(0, 8);
+        let currentID = currentPackage[0].bul1.id;
+        
+        // Checking for same ID on all builetens
+        currentPackage.filter((builetens) => {
+            let cond1 = currentID === builetens.bul1.id;
+            let cond2 = currentID === builetens.bul2.id;
+            return cond1 || cond2;
+        });
+
+        // If not, then +1 to statistic
+        if (packageObject.package.length !== currentPackage.length) {
+            this.#statistic["Missed correct ID and same ID in all builetens"]++;
+            return 1;
+        }
+
+        //if ()
+
+        this.#decryptMessagesInPackage(currentPackage);
     }
    
 
-    givePublicKey(voterName) {
-        let indexOfName; 
-        const canFindName = this.#listOfVoters.find((v, i) => {
-            indexOfName = i;
-            return v.name === voterName;
-        });
+    // givePublicKey(voterName) {
+    //     let indexOfName; 
+    //     const canFindName = this.#listOfVoters.find((v, i) => {
+    //         indexOfName = i;
+    //         return v.name === voterName;
+    //     });
 
-        const checkedStatus = this.#listOfVoters[indexOfName].status === "checked";
-        // const verified = this.#listOfVoters[indexOfName].verified === "veried";
+    //     const checkedStatus = this.#listOfVoters[indexOfName].status === "checked";
+    //     // const verified = this.#listOfVoters[indexOfName].verified === "veried";
 
-        // if (checkedStatus && !verified) {
-        //     console.warn(`You're imposter, ${voterName}`);
-        //     return 7;
-        // } else 
-        if (checkedStatus) {
-            console.warn(`Don't try to fool us, you're trying to vote second time or you're imposter, ${voterName}`);
-            return 1;
-        } else if (!canFindName) {
-            console.warn(`Sorry, but you cannot vote at this CVK, ${voterName}`);
-            return 0;
-        } else if (canFindName) {
-            return this.#listOfVoters[indexOfName].channels;
-        }
-    };
+    //     // if (checkedStatus && !verified) {
+    //     //     console.warn(`You're imposter, ${voterName}`);
+    //     //     return 7;
+    //     // } else 
+    //     if (checkedStatus) {
+    //         console.warn(`Don't try to fool us, you're trying to vote second time or you're imposter, ${voterName}`);
+    //         return 1;
+    //     } else if (!canFindName) {
+    //         console.warn(`Sorry, but you cannot vote at this CVK, ${voterName}`);
+    //         return 0;
+    //     } else if (canFindName) {
+    //         return this.#listOfVoters[indexOfName].channels;
+    //     }
+    // };
 
-    getBuileten(buileten) {
-        const encryptedMessage = buileten.buileten;
+    // getBuileten(buileten) {
+    //     const encryptedMessage = buileten.buileten;
 
-        const profileOfVoter = this.#listOfVoters.find((voterN, i) => {
-            const isVerified = crypto.verify(
-                "sha256",
-                Buffer.from(voterN.name),
-                {
-                    key: buileten.signa.theirPKey,
-                    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-                },
-                buileten.signa.theirSign
-            )
+    //     const profileOfVoter = this.#listOfVoters.find((voterN, i) => {
+    //         const isVerified = crypto.verify(
+    //             "sha256",
+    //             Buffer.from(voterN.name),
+    //             {
+    //                 key: buileten.signa.theirPKey,
+    //                 padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+    //             },
+    //             buileten.signa.theirSign
+    //         )
 
-            if (isVerified) {
-                // this.#listOfVoters[i].verified = "verified";
-                this.#listOfVoters[i].status = "checked";
-            }
+    //         if (isVerified) {
+    //             // this.#listOfVoters[i].verified = "verified";
+    //             this.#listOfVoters[i].status = "checked";
+    //         }
 
-            return isVerified;
-        });
+    //         return isVerified;
+    //     });
 
-        const decryptedMessage = profileOfVoter.channels.ch2.decrypt(buileten.buileten);
+    //     const decryptedMessage = profileOfVoter.channels.ch2.decrypt(buileten.buileten);
         
         
-        const favourite = this.listOfCandidates.find((candidate) => {
-            if (candidate.name === decryptedMessage) {
-                profileOfVoter.voteFor = decryptedMessage;
-                candidate.votes++;
-            }
-            return candidate.name === decryptedMessage;
-        });
+    //     const favourite = this.listOfCandidates.find((candidate) => {
+    //         if (candidate.name === decryptedMessage) {
+    //             profileOfVoter.voteFor = decryptedMessage;
+    //             candidate.votes++;
+    //         }
+    //         return candidate.name === decryptedMessage;
+    //     });
 
-        if (!favourite) {
-            console.warn(`We don't have this option, please pay attention, ${profileOfVoter.name}!`);
-            return 3;
-        }
-    }
+    //     if (!favourite) {
+    //         console.warn(`We don't have this option, please pay attention, ${profileOfVoter.name}!`);
+    //         return 3;
+    //     }
+    // }
 
     finalResults() {
 
