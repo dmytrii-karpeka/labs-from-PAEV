@@ -1,9 +1,10 @@
 const crypto = require('crypto');
-const { ElGamal, Alphabet } = require('./elgamal.js');
+//const { ElGamal, Alphabet } = require('./elgamal.js');
 
 
 class Voter {
     #theirKeys;
+    #package;
         constructor(id, vote, candidates) {
         //this.name = name;
         //this.age = age;
@@ -13,11 +14,11 @@ class Voter {
         this.vote = vote;
         this.candidates = candidates;
         this.#theirKeys = { };
-        this.#theirBuileten = {
+        //this.#theirBuileten = {
             // signa: { signature and public key of RSA sign } OBJECT
             // buileten: elGamalized with given public key from CVK } STRING
-        };
-        this.#hashedBuileten = "";
+        //};
+        //this.#hashedBuileten = "";
         this.#package = [];
     }
 
@@ -32,7 +33,7 @@ class Voter {
     }
 
     formPackage() {
-        this.#package = [...Array(10).keys].map((v) => {
+        this.#package = [...Array(10).keys()].map((v) => {
             return {
                 packageNumber: v,
                 bul1: {
@@ -89,6 +90,7 @@ class Voter {
 
     receiveBuiletensPair(builetensPair) {
         // Decrypt messages
+        console.log(builetensPair);
         builetensPair.bul1.vote = crypto.privateDecrypt(
             {
                 key: this.#theirKeys.privateRSAKey,
@@ -144,6 +146,7 @@ class CVK {
 
     rsaPublicKey;
     #rsaPrivateKey;
+    #rsaPublicKey;
     constructor() {
 
         this.listOfCandidates = [
@@ -232,8 +235,8 @@ class CVK {
 
     receivePackage(packageObject) {
         this.#packageObject = packageObject;
-        this.#currentPackage = packageObject.package.slice(0, 8);
-        this.#currentID = currentPackage[0].bul1.id;
+        this.#currentPackage = packageObject.package.slice(0, 9);
+        this.#currentID = this.#currentPackage[0].bul1.id;
         
         // Checking if voter didn't sent vote already
         this.#listOfVoters.find((voter) => {
@@ -248,6 +251,7 @@ class CVK {
         })
 
         // Checking for same ID on all builetens
+        //console.log(this.#currentPackage);
         this.#currentPackage.filter((builetens) => {
             let cond1 = this.#currentID === builetens.bul1.id;
             let cond2 = this.#currentID === builetens.bul2.id;
@@ -255,12 +259,15 @@ class CVK {
         });
 
         // If not, then +1 to statistic
-        if (this.#packageObject.package.length !== this.#currentPackage.length) {
+        // console.log(this.#packageObject.package.length);
+        // console.log(this.#currentPackage.length);
+        if (this.#packageObject.package.length - 1 !== this.#currentPackage.length) {
             this.#statistic["Missed correct ID and same ID in all builetens"]++;
+            console.log("Not all IDs identical");
             return 1;
         }
 
-        this.#decryptMessagesInPackage(currentPackage);
+        this.#decryptMessagesInPackage();
     }
 
     #decryptMessagesInPackage() {
@@ -297,7 +304,9 @@ class CVK {
 
     #signTwoBuiletens() {
         // Retrive two builetens 
-        let twoBuiletens = this.#currentPackage.package[-1];
+        console.log(this.#currentPackage);
+        let twoBuiletens = this.#currentPackage.slice(-1)[0];
+        console.log(twoBuiletens);
         // Generate pubK and privK for signing
         const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048});
         this.rsaPublicKey = publicKey;
@@ -350,6 +359,9 @@ class CVK {
         )
 
         console.log("Signature is", isVerified );
+
+
+        // To be continued...
     }
     
         
@@ -399,8 +411,9 @@ function eVoting() {
 
     testVoter.formPackage();
     let packageOfVoter = testVoter.deliverPackage();
-    CVK0.receivePackage(packageOfVoter);
-    
+    let pairOfB = CVK0.receivePackage(packageOfVoter);
+    let builSingle = testVoter.receiveBuiletensPair(pairOfB);
+    CVK0.receiveFinalBuileten(builSingle);
 
 
     // class Imposter extends Voter {
