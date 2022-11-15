@@ -86,6 +86,51 @@ class Voter {
     #deliverKey() {
         return this.#theirKeys.privateRSAKey;
     }
+
+    receiveBuiletensPair(builetensPair) {
+        // Decrypt messages
+        builetensPair.bul1.vote = crypto.privateDecrypt(
+            {
+                key: this.#theirKeys.privateRSAKey,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: "sha256",
+            },
+            builetensPair.bul1.vote
+        )
+
+        builetensPair.bul2.vote = crypto.privateDecrypt(
+            {
+                key: this.#theirKeys.privateRSAKey,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: "sha256",
+            },
+            builetensPair.bul2.vote
+        )
+
+        // Create instance of single buileten from pair
+        if (builetensPair.bul1.vote === "Yes" && builetensPair.bul2.vote === "No") {
+            giveBuiletenToCVK(builetensPair.bul1);
+        } else {
+            giveBuiletenToCVK(builetensPair.bul2);
+        }
+    }
+
+    giveBuiletenToCVK(singleBuileten) {
+        // RSA encryption of message before sending
+        // using public key given by CVK
+        const pKey = builetensPair.signPublicKey;
+
+        singleBuileten.vote = crypto.publicEncrypt(
+            {
+                key: pKey,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: "sha256",
+            },
+            Buffer.from(singleBuileten.vote)
+        );
+
+        return singleBuileten;
+    } 
 }
 
 
@@ -195,7 +240,7 @@ class CVK {
             if (voter.id === this.#currentID) {
                 if (voter.status === "") {
                     voter.status = "Not signed yet";
-                } else if (voter.status === "Signed") {
+                } else if (voter.status === "Messages signed") {
                     this.#statistic["Attempt to vote second time"]++;
                 }
             }
@@ -258,58 +303,55 @@ class CVK {
         this.rsaPublicKey = publicKey;
         this.#rsaPrivateKey = privateKey;
 
-        
+        // Signing of CVK
+        twoBuiletens.bul1.signature = crypto.sign(
+            "sha256",
+            Buffer.from(twoBuiletens.bul1.vote),
+            {
+                key: this.#rsaPrivateKey,
+                padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+            }
+        );
+
+        twoBuiletens.bul2.signature = crypto.sign(
+            "sha256",
+            Buffer.from(twoBuiletens.bul2.vote),
+            {
+                key: this.#rsaPrivateKey,
+                padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+            }
+        );
+
+        // Add public key to the last two Builetens from package to verify
+        twoBuiletens.signPublicKey = this.#rsaPublicKey;
+
+        // Change status for voter
+        this.#listOfVoters.find(voter => voter.id === this.#currentID).status = "Messages signed";
+
+        // Return builetens to voter
+        this.#returnBuiletens(twoBuiletens);
+    }
+
+    #returnBuiletens(builetensPair) {
+        return builetensPair;
     }
    
+    // Receive final buileten from voter
+    receiveFinalBuileten(buileten) {
+        // Check for verification
+        const isVerified = crypto.verify(
+            "sha256",
+            Buffer.from(buileten.vote),
+            {
+                key: this.#rsaPublicKey,
+                padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+            },
+            buileten.signature
+        )
 
-    // givePublicKey(voterName) {
-    //     let indexOfName; 
-    //     const canFindName = this.#listOfVoters.find((v, i) => {
-    //         indexOfName = i;
-    //         return v.name === voterName;
-    //     });
-
-    //     const checkedStatus = this.#listOfVoters[indexOfName].status === "checked";
-    //     // const verified = this.#listOfVoters[indexOfName].verified === "veried";
-
-    //     // if (checkedStatus && !verified) {
-    //     //     console.warn(`You're imposter, ${voterName}`);
-    //     //     return 7;
-    //     // } else 
-    //     if (checkedStatus) {
-    //         console.warn(`Don't try to fool us, you're trying to vote second time or you're imposter, ${voterName}`);
-    //         return 1;
-    //     } else if (!canFindName) {
-    //         console.warn(`Sorry, but you cannot vote at this CVK, ${voterName}`);
-    //         return 0;
-    //     } else if (canFindName) {
-    //         return this.#listOfVoters[indexOfName].channels;
-    //     }
-    // };
-
-    // getBuileten(buileten) {
-    //     const encryptedMessage = buileten.buileten;
-
-    //     const profileOfVoter = this.#listOfVoters.find((voterN, i) => {
-    //         const isVerified = crypto.verify(
-    //             "sha256",
-    //             Buffer.from(voterN.name),
-    //             {
-    //                 key: buileten.signa.theirPKey,
-    //                 padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-    //             },
-    //             buileten.signa.theirSign
-    //         )
-
-    //         if (isVerified) {
-    //             // this.#listOfVoters[i].verified = "verified";
-    //             this.#listOfVoters[i].status = "checked";
-    //         }
-
-    //         return isVerified;
-    //     });
-
-    //     const decryptedMessage = profileOfVoter.channels.ch2.decrypt(buileten.buileten);
+        console.log("Signature is", isVerified );
+    }
+    
         
         
     //     const favourite = this.listOfCandidates.find((candidate) => {
@@ -345,73 +387,54 @@ class CVK {
 }
 
 
-let statistic = {
-    "Явка на вибори:" : 0,
-    "Не проголосувало:": 0,
-    "Проголосувало неправильно": 0,
-    "Виборець не має права голосувати": 0,
-    "Виборець хоче проголосувати повторно": 0,
-};
-
-function eVote(voter, cvk) {
-    const pk = cvk.givePublicKey(voter.name);
-    if (pk === 0) {
-        statistic["Виборець не має права голосувати"]++;
-        statistic["Явка на вибори:"]++;
-        return 0;
-    } else if (pk === 1) {
-        statistic["Виборець хоче проголосувати повторно"]++;
-        return 0;
-    } 
-
-    const sendedBuileten = voter.sendBuileten(pk);
-
-    const gottenBuileten = cvk.getBuileten(sendedBuileten);
-
-    if (gottenBuileten === 3) {
-        statistic["Проголосувало неправильно"]++;
-        statistic["Явка на вибори:"]++;
-        return 0;
-    }
-
-    statistic["Явка на вибори:"]++;
-}
-
+// Main driver code
 function eVoting() {
-    let CVK1 = new CVK("CVK#1");
+    let CVK0 = new CVK();
 
-    class Imposter extends Voter {
-        constructor(name, age, cvk, message) {
-            super(name, age, cvk, message)
-            this.name = "imposter";
-        }
-    }
+    let testVoter = new Voter(
+        123456789, 
+        ["Yes", "No"], 
+        ["Twitter new feature is useful", "No, it's not"]
+        );
 
-    let voters = [
-        new Voter("Maria Andrushko", 18, "CVK#1", "Elon Musk, who support Ukraine"),
-        new Voter("Maria Andrushko", 18, "CVK#1", "Elon Musk, who support Ukraine"),
-        new Voter("Dodik from Kremlin", 4, "CVK#1", "Elon Musk, who support russia"),
-        new Voter("Pavlo Stonkevych", 21, "CVK#1", "Elon Musk, who support Ukraine"),
-        new Voter("Yakym Galayda", 19, "CVK#1", "Elon Musk, who support Ukraine"),
-        new Voter("Oksana Styslo", 42, "CVK#1", "Elon Musk, who support Ukraine"),
-        new Voter("Vadym Detec", 31, "CVK#1", "Elon Musk is very toxic, I don't like him at all"),
-        new Voter("Dmytrii Karpeka", 20, "CVK#1", "I agree with Vadym on his statement"),
-        new Voter("Dmytrii Karpeka", 20, "CVK#1", "I have another option now..."),
-        new Voter("Vasylyna Prybylo", 67, "CVK#1", "Elon Musk, who support russia"),
-        new Imposter("Anna Yaroslavna", 990, "CVK#1", "Elon Musk, who support russia")
-    ]
+    testVoter.formPackage();
+    let packageOfVoter = testVoter.deliverPackage();
+    CVK0.receivePackage(packageOfVoter);
+    
 
-    voters.map((voter) => eVote(voter, CVK1));
-    statistic["Не проголосувало:"] = CVK1.finalResults();
 
-    Object.entries(statistic).map(statement => console.log(statement[0] + " " + statement[1]))
+    // class Imposter extends Voter {
+    //     constructor(name, age, cvk, message) {
+    //         super(name, age, cvk, message)
+    //         this.name = "imposter";
+    //     }
+    // }
 
-    // Дослідження
-    try {
-        CVK1.listOfVoter();
-    } catch (e) {
-        console.log("Somebody wanted to stole our database!");
-}
+    // let voters = [
+    //     new Voter("Maria Andrushko", 18, "CVK#1", "Elon Musk, who support Ukraine"),
+    //     new Voter("Maria Andrushko", 18, "CVK#1", "Elon Musk, who support Ukraine"),
+    //     new Voter("Dodik from Kremlin", 4, "CVK#1", "Elon Musk, who support russia"),
+    //     new Voter("Pavlo Stonkevych", 21, "CVK#1", "Elon Musk, who support Ukraine"),
+    //     new Voter("Yakym Galayda", 19, "CVK#1", "Elon Musk, who support Ukraine"),
+    //     new Voter("Oksana Styslo", 42, "CVK#1", "Elon Musk, who support Ukraine"),
+    //     new Voter("Vadym Detec", 31, "CVK#1", "Elon Musk is very toxic, I don't like him at all"),
+    //     new Voter("Dmytrii Karpeka", 20, "CVK#1", "I agree with Vadym on his statement"),
+    //     new Voter("Dmytrii Karpeka", 20, "CVK#1", "I have another option now..."),
+    //     new Voter("Vasylyna Prybylo", 67, "CVK#1", "Elon Musk, who support russia"),
+    //     new Imposter("Anna Yaroslavna", 990, "CVK#1", "Elon Musk, who support russia")
+    // ]
+
+//     voters.map((voter) => eVote(voter, CVK1));
+//     statistic["Не проголосувало:"] = CVK1.finalResults();
+
+//     Object.entries(statistic).map(statement => console.log(statement[0] + " " + statement[1]))
+
+//     // Дослідження
+//     try {
+//         CVK1.listOfVoter();
+//     } catch (e) {
+//         console.log("Somebody wanted to stole our database!");
+// }
 }
 
 
