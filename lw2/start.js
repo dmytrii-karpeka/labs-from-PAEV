@@ -76,7 +76,7 @@ class Voter {
 
     deliverPackage() {
         this.#rsaEncryption();
-        console.log("Package messages encrypted");
+        console.log("Package messages encrypted by safe private key");
         return {
             pKey: this.#deliverKey(),
             package: this.#package
@@ -92,9 +92,15 @@ class Voter {
 class CVK {
     #listOfVoters;
     #statistic;
+
     #currentPackage;
-    constructor(nameOfCVK) {
-        this.nameOfCVK = nameOfCVK;
+    #packageObject;
+    #currentID;
+
+    rsaPublicKey;
+    #rsaPrivateKey;
+    constructor() {
+
         this.listOfCandidates = [
             {
                 name: "Twitter new feature is useful",
@@ -105,6 +111,7 @@ class CVK {
                 votes: 0
             }
         ];
+
         this.#listOfVoters = [
             {
                 name: "Maria Andrushko",
@@ -175,30 +182,83 @@ class CVK {
             "Attempt to vote second time": 0
         }
 
-        this.#currentPackage = {};
     }
 
 
     receivePackage(packageObject) {
+        this.#packageObject = packageObject;
         this.#currentPackage = packageObject.package.slice(0, 8);
-        let currentID = currentPackage[0].bul1.id;
+        this.#currentID = currentPackage[0].bul1.id;
         
+        // Checking if voter didn't sent vote already
+        this.#listOfVoters.find((voter) => {
+            if (voter.id === this.#currentID) {
+                if (voter.status === "") {
+                    voter.status = "Not signed yet";
+                } else if (voter.status === "Signed") {
+                    this.#statistic["Attempt to vote second time"]++;
+                }
+            }
+            return voter.id === this.#currentID;
+        })
+
         // Checking for same ID on all builetens
-        currentPackage.filter((builetens) => {
-            let cond1 = currentID === builetens.bul1.id;
-            let cond2 = currentID === builetens.bul2.id;
+        this.#currentPackage.filter((builetens) => {
+            let cond1 = this.#currentID === builetens.bul1.id;
+            let cond2 = this.#currentID === builetens.bul2.id;
             return cond1 || cond2;
         });
 
         // If not, then +1 to statistic
-        if (packageObject.package.length !== currentPackage.length) {
+        if (this.#packageObject.package.length !== this.#currentPackage.length) {
             this.#statistic["Missed correct ID and same ID in all builetens"]++;
             return 1;
         }
 
-        //if ()
-
         this.#decryptMessagesInPackage(currentPackage);
+    }
+
+    #decryptMessagesInPackage() {
+        // Retrieve private key to decipher messages in package
+        let currentpKey = this.#packageObject.pKey;
+        this.#currentPackage.map((builetensPair) => {
+            // Decrypt m1
+            builetensPair.bul1.vote = crypto.privateDecrypt({
+                key: currentpKey,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: "sha256"
+            },
+            builetensPair.bul1.vote
+            );
+        
+            // Decrypt m2
+            builetensPair.bul2.vote = crypto.privateDecrypt({
+                key: currentpKey,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: "sha256"
+            },
+            builetensPair.bul2.vote
+            );
+        });
+
+        this.#listOfVoters.find((voter) => {
+            return voter.id === this.#currentID;
+        }).status = "Messages decrypted";
+
+        // TODO: Check if messages are correct
+
+        this.#signTwoBuiletens();
+    }
+
+    #signTwoBuiletens() {
+        // Retrive two builetens 
+        let twoBuiletens = this.#currentPackage.package[-1];
+        // Generate pubK and privK for signing
+        const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048});
+        this.rsaPublicKey = publicKey;
+        this.#rsaPrivateKey = privateKey;
+
+        
     }
    
 
