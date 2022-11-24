@@ -4,25 +4,12 @@ class Voter {
     #theirKeys;
     #package;
         constructor(id, vote, candidates) {
-        //this.name = name;
-        //this.age = age;
         this.id = id;
-        //this.theirCVK = theirCVK;
-        //this.message = message;
         this.vote = vote;
         this.candidates = candidates;
         this.#theirKeys = { };
-        //this.#theirBuileten = {
-            // signa: { signature and public key of RSA sign } OBJECT
-            // buileten: elGamalized with given public key from CVK } STRING
-        //};
-        //this.#hashedBuileten = "";
         this.#package = [];
     }
-
-    // givePrivateKey() {
-    //     return this.#theirKeys.privateRSAKey;
-    // }
 
     #generateKeys() {
         const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048});
@@ -50,7 +37,6 @@ class Voter {
 
     #rsaEncryption() {
         this.#generateKeys();
-        //this.formPackage();
         this.#package.map((v) => {
             v.bul1.vote = crypto.publicEncrypt(
                 {
@@ -285,7 +271,6 @@ class CVK {
 
     rsaPublicKey;
     #rsaPrivateKey;
-    #rsaPublicKey;
     constructor() {
 
         this.listOfCandidates = [
@@ -380,7 +365,6 @@ class CVK {
             "Voted incorrectly": 0,
             "Missed correct ID and same ID in all builetens": 0,
             "Attempt to vote second time": 0,
-            "Vote blind sign is incorrect and CVK can not accept and count that vote": 0
         }
 
     }
@@ -401,7 +385,7 @@ class CVK {
                 }
             }
             return voter.id === this.#currentID;
-        })
+        });
 
         // Checking for same ID on all builetens
         let hasIdenticalBuiletenID = this.#currentPackage.every((builetens) => {
@@ -513,8 +497,6 @@ class CVK {
             // Associate vote with a voter and change their status
             this.#listOfVoters[this.#listOfVoters.findIndex(voter => voter.id === buileten.id)].theirBuileten = buileten;
             this.#listOfVoters[this.#listOfVoters.findIndex(voter => voter.id === buileten.id)].status = "Voted";
-        } else {
-            this.#statistic["Vote blind sign is incorrect and CVK can not accept and count that vote"]++;
         } 
     }
 
@@ -633,28 +615,14 @@ function eVoting() {
     let package1 = voters[0].deliverPackage();
     let pairOfB1 = CVK0.receivePackage(package1); // ЦВК отримує вдруге бюлетені від того ж виборця і це йде в статистику порушень
 
+
     let v2 = new SomeVoter(212312, ["No", "Yes"], ["Twitter new feature is useful", "No, it's not"]);   // Неправильно заповнені бюлетені (ID на бюлетенях не однаковий),
                                                                                                         // іде в статистику порушень
     v2.formPackage();
     let package2 = v2.deliverPackage();
-    if (package2) {
-        let pairOfB2 = CVK0.receivePackage(package2);
-        if (pairOfB2) {
-            let singleB2 = voter.receiveBuiletensPair(pairOfB2);
-            if (singleB2) {
-                CVK0.receiveFinalBuileten(singleB2);
-            }
-        }
-    }
+    let pairOfB2 = CVK0.receivePackage(package2);
 
     
-    
-    // testVoter.formPackage();
-    // let packageOfVoter = testVoter.deliverPackage();
-    // let pairOfB = CVK0.receivePackage(packageOfVoter);
-    // let builSingle = testVoter.receiveBuiletensPair(pairOfB);
-    // CVK0.receiveFinalBuileten(builSingle);
-
     // Фінальний результат і підведення підсумків
     CVK0.finalResults();
 }
