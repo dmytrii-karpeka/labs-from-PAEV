@@ -83,7 +83,8 @@ interface BuroArtifact {
 interface Statistic {
     "Second voting": number,
     "Signature violation": number,
-    "Attempt to vote without proper registration": number
+    "Attempt to vote without proper registration": number,
+    "Not unique ID": number
 }
 
 class Buro {
@@ -94,7 +95,8 @@ class Buro {
         this.#statistic = {
             "Second voting": 0,
             "Signature violation": 0,
-            "Attempt to vote without proper registration": 0
+            "Attempt to vote without proper registration": 0,
+            "Not unique ID": 0
         }
     }
 
@@ -225,7 +227,7 @@ class CVK {
                 });
                 this.#voting[decipheredMessage]++;
             } else {
-                this.#statistic["Second voting"]++;
+                this.#statistic["Not unique ID"]++;
             }
         } else {
             this.#statistic["Signature violation"]++;
@@ -244,7 +246,10 @@ class CVK {
             console.log("Participant with ID", finalVote.id, "voted for", finalVote.buileten);
         })
 
-        
+        console.log("Violations fixed during voting process:")
+        Object.entries(this.#statistic).forEach(([name, violations]) => {
+            console.log(name, ":", violations);
+        })
     }
 }
 
@@ -253,10 +258,16 @@ function main() {
     let testBuro: Buro = new Buro();
     let testVoters: Voter[] = [
         new Voter("Sashko", "Option1", 2),
+        new Voter("Sashko", "Option2", 3), // second time voting
         new Voter("Daryna", "Option1", 5),
-        new Voter("Alex", "Option2", 10)
+        new Voter("Alex", "Option2", 10),
+        new Voter("Antin", "Option1", 17),
+        new Voter("Dmytrii", "Option2", 19),
+        new Voter("Olena", "Option2", 23),
+        new Voter("Artem", "Option2", 61),
+        new Voter("Lidiia", "Option1", 31),
+        new Voter("Sophia", "Option2", 37)
     ]
-    // let testVoter: Voter = new Voter("Daryna", 3);
    
     testVoters.forEach((testVoter) => {
         // create gen in voter
@@ -272,6 +283,7 @@ function main() {
         // voter gets his generated ID for voting
         testVoter.receiveRandomID(lastRegistrationNumber);
     });
+
     // create CVK with list of ID from Buro and their statistic of violations
     let testCVK: CVK = new CVK(testBuro.ListOfID, testBuro.statistic, ["Option1", "Option2"]);
     
