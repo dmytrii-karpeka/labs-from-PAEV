@@ -153,21 +153,28 @@ class Buro {
     }
 }
 
-interface Candidate {
-    name: string,
-    votes: number
+interface Candidates {
+    [name: string]: number
+}
+
+interface finalVote {
+    id: number,
+    buileten: string
 }
 
 class CVK {
     listOfID: number[];
     #listOfChannels: Channel[];
     #statistic: Statistic;
-    #voting: Candidate[];
-    constructor(listOfIDs: number[], statistic: Statistic) {
+    #voting: Candidates;
+    #finalList: finalVote[];
+    constructor(listOfIDs: number[], statistic: Statistic, candidateNames: string[]) {
         this.listOfID = listOfIDs;
         this.#listOfChannels = [];
         this.#statistic = statistic;
-        this.
+        this.#voting = {};
+        candidateNames.map((candidateName) => this.#voting[candidateName] = 0)
+        this.#finalList = [];
     }
 
     createPublicKey(gen: number) {
@@ -198,9 +205,8 @@ class CVK {
             console.log("Attempt to vote without proper registration");
             this.#statistic["Attempt to vote without proper registration"]++;
         } else {
-            const index: number = this.listOfID.indexOf(message.randomID); 
+            const index: number = this.listOfID.indexOf(message.randomID);
             this.listOfID.splice(index, 1);
-            this.
         }
 
         return uniqueness;
@@ -213,14 +219,31 @@ class CVK {
             if (unique) {
                 let lastChannel: Channel = this.#listOfChannels.slice(-1)[0];
                 let decipheredMessage: string = lastChannel.decrypt(message.buileten);
-                return decipheredMessage;
+                this.#finalList.push({
+                    id: message.ID,
+                    buileten: decipheredMessage
+                });
+                this.#voting[decipheredMessage]++;
             } else {
                 this.#statistic["Second voting"]++;
             }
         } else {
             this.#statistic["Signature violation"]++;
-            return "";
         }
+    }
+
+    retrieveResults() {
+        Object.entries(this.#voting).forEach(([candidate, votes]) => {
+            console.log(`${candidate} has scored ${votes} votes`);
+        })
+        let votingSorted = Object.entries(this.#voting).sort(([name1, vote1], [name2, vote2]) => vote2 - vote1);
+        console.log("The winner is ", votingSorted[0][0], " with votes of ", votingSorted[0][1]);
+
+        console.log("Table of participants: ");
+        this.#finalList.forEach((finalVote) => {
+            console.log("Participant with ID", finalVote.id, "voted for", finalVote.buileten);
+        })
+
         
     }
 }
@@ -229,9 +252,9 @@ function main() {
     // initialize Buro and Voters
     let testBuro: Buro = new Buro();
     let testVoters: Voter[] = [
-        new Voter("Sashko", "Test vote for candidate", 2),
-        new Voter("Daryna", "2", 5),
-        new Voter("Daryna", "1", 10)
+        new Voter("Sashko", "Option1", 2),
+        new Voter("Daryna", "Option1", 5),
+        new Voter("Alex", "Option2", 10)
     ]
     // let testVoter: Voter = new Voter("Daryna", 3);
    
@@ -250,17 +273,18 @@ function main() {
         testVoter.receiveRandomID(lastRegistrationNumber);
     });
     // create CVK with list of ID from Buro and their statistic of violations
-    let testCVK: CVK = new CVK(testBuro.ListOfID, testBuro.statistic);
-    // create CVK public key to cipher
-    let pubKey = testCVK.createPublicKey(testVoters[0].gen);
-    // voter creates message (buileten) for CVK
-    let cipheredMessage = testVoters[0].createMessage(pubKey);
-    // CVK deciphers voter's message and their buileten
-    let decipherMessage = testCVK.receiveCipheredBuileten(cipheredMessage);
-    // let decipheredMessage = testCVK.receiveCipheredBuileten(cipheredMessage);
-    console.log(decipherMessage);
+    let testCVK: CVK = new CVK(testBuro.ListOfID, testBuro.statistic, ["Option1", "Option2"]);
+    
+    testVoters.forEach((testVoter) => {
+        // create CVK public key to cipher
+        let pubKey = testCVK.createPublicKey(testVoter.gen);
+        // voter creates message (buileten) for CVK
+        let cipheredMessage = testVoter.createMessage(pubKey);
+        // CVK deciphers voter's message and their buileten
+        testCVK.receiveCipheredBuileten(cipheredMessage);
+    });
 
-
+    testCVK.retrieveResults();
 }
 
 main();
