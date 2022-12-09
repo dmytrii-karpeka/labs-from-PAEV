@@ -267,7 +267,7 @@ function main() {
         new Voter("Artem", "Option2", 61),
         new Voter("Lidiia", "Option1", 31),
         new Voter("Sophia", "Option2", 37)
-    ]
+    ];
    
     testVoters.forEach((testVoter) => {
         // create gen in voter
