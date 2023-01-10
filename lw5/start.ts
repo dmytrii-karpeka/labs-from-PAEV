@@ -17,7 +17,10 @@ interface CVKartifact {
     publicKey1: crypto.KeyObject,
     privateKey1: crypto.KeyObject,
     publicKey2: crypto.KeyObject,
-    privateKey2: crypto.KeyObject
+    privateKey2: crypto.KeyObject,
+    part1: Buffer,
+    part2: Buffer,
+    wholeBuileten: String
 }
 
 class CVK {
@@ -33,6 +36,7 @@ class CVK {
     generateID() {
         this.candidates.forEach((candidate) => {
             candidate.id = getRandomInt(10000000, 40000000);
+            console.log("Candidate id is " + candidate.id);
         });
 
         this.listOfVoters.forEach((voter) => {
@@ -48,25 +52,157 @@ class CVK {
             let obj2 = crypto.generateKeyPairSync("rsa", {
                 modulusLength: 2048,
             });
+
             this.artifacts.push(
                 {
                     voter: voter,
                     publicKey1: obj1.publicKey,
                     privateKey1: obj1.privateKey,
                     publicKey2: obj2.publicKey,
-                    privateKey2: obj2.privateKey
+                    privateKey2: obj2.privateKey,
+                    part1: Buffer.from(""),
+                    part2: Buffer.from(""),
+                    wholeBuileten: ""
                 }
             );
+
         });
     }
 
-    
+    givePublicKeys(voter: Voter) {
+        let artifact = this.artifacts.find((artifact) => {
+            return artifact.voter === voter;
+        });
+        if (artifact) {
+            let publicKeys = {
+                pKey1: artifact.publicKey1,
+                pKey2: artifact.publicKey2
+            }
+            return publicKeys;
+        }
+    }
+
+    receiveTwoParts(part1: Output[], part2: Output[]) {
+        this.artifacts.forEach((artifact) => {
+            let voterPart1 = part1.find((singleOutput) => singleOutput.id === artifact.voter.id);
+            let voterPart2 = part2.find((singleOutput) => singleOutput.id === artifact.voter.id);
+            if (voterPart1 && voterPart2) {
+                artifact.part1 = Buffer.from(voterPart1.cipheredBuileten);
+                artifact.part2 = Buffer.from(voterPart2.cipheredBuileten);
+            }
+        })
+    }
+
+    decipherAllBuiletens() {
+        this.artifacts.forEach((artifact) => {
+            const decryptedString1 = crypto.privateDecrypt(
+                {
+                  key: artifact.privateKey1,
+                  // In order to decrypt the data, we need to specify the
+                  // same hashing function and padding scheme that we used to
+                  // encrypt the data in the previous step
+                  padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                  oaepHash: "sha256",
+                },
+                Buffer.from(artifact.part1));
+            const decryptedString2 = crypto.privateDecrypt(
+                {
+                  key: artifact.privateKey2,
+                  // In order to decrypt the data, we need to specify the
+                  // same hashing function and padding scheme that we used to
+                  // encrypt the data in the previous step
+                  padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                  oaepHash: "sha256",
+                },
+                Buffer.from(artifact.part2));
+            
+            artifact.wholeBuileten = decryptedString1.toString() + decryptedString2.toString();
+        });
+    }
+
+    results() {
+        this.artifacts.forEach((artifact) => {
+            let candidate = this.candidates.find((candidate) => candidate.id.toString() === artifact.wholeBuileten);
+            if (candidate) {
+                candidate.votesFor++;
+            }
+        });
+
+        this.candidates.sort((a, b) => {
+            if (a.votesFor < b.votesFor) return -1;
+            if (a.votesFor > b.votesFor) return 1;
+            return 0;
+        })
+
+        console.log(`The winner of election is ${this.candidates[0].name} with id ${this.candidates[0].id} with voting for ${this.candidates[0].votesFor}`);
+
+        this.artifacts.forEach((artifact) => {
+            console.log(`${artifact.voter.id} voted for candidate ${artifact.wholeBuileten}`);
+        })
+
+
+    }
+}
+
+interface VKartifact {
+    id: number,
+    cipheredBuileten: string|Buffer,
+    status: string
+}
+
+interface Output {
+    id: number,
+    cipheredBuileten: string|Buffer
+}
+
+class VK {
+    register: VKartifact[];
+    constructor() {
+        this.register = [];
+    }
+
+    receiveMessage(message: Message) {
+        if (this.#validateSignature(message.buileten, message.signature, message.publicKey)) {
+            if (!this.register.find((vkart) => vkart.id === message.theirId)) {
+                this.register.push({
+                    id: message.theirId,
+                    cipheredBuileten: message.buileten,
+                    status: "received"
+                });
+            }
+        }
+        // console.log(this.register);
+    }
+
+    publishIDandBuiletens() {
+        let output: Output[] = [];
+        this.register.forEach((vkart) => {
+            output.push({
+                id: vkart.id,
+                cipheredBuileten: vkart.cipheredBuileten
+            })
+        })
+        return output;
+    }
+
+    #validateSignature(data: String|Buffer, signature: Buffer, pKey: crypto.KeyObject) {
+        const isVerified = crypto.verify(
+            "sha256",
+            Buffer.from(data),
+            {
+              key: pKey,
+              padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+            },
+            signature
+          );
+        return isVerified;
+    }
 }
 
 interface Message {
     buileten: string|Buffer,
     theirId: number,
-    signature: string|Buffer,
+    signature: Buffer,
     publicKey: crypto.KeyObject
 }
 
@@ -79,6 +215,7 @@ class Voter {
     // Keys for signing
     privateKey: crypto.KeyObject;
     publicKey: crypto.KeyObject;
+    // Public keys for ciphering bul1 and bul2
     constructor(name: string) {
         this.name = name;
         this.id = 0;
@@ -97,32 +234,26 @@ class Voter {
         
         this.publicKey = publicKey;
         this.privateKey = privateKey;
-
-
     };
 
     separateId() {
         this.buileten1 = this.voteFor.id.toString();
         this.buileten2 = this.buileten1.substring(this.buileten1.length/2);
         this.buileten1 = this.buileten1.substring(0, this.buileten1.length/2);
-
-        console.log(this.voteFor.id);
-        console.log(this.buileten1);
-        console.log(this.buileten2);
     }
 
     formMessage(publicKeyToCipher: crypto.KeyObject, buileten: string) {
-        let cipheredMessage = this.cipherBuileten(buileten, publicKeyToCipher);
+        let cipheredMessage = this.#cipherBuileten(buileten, publicKeyToCipher);
         let message: Message = {
             buileten: cipheredMessage,
             theirId: this.id,
-            signature: this.signBuileten(cipheredMessage),
+            signature: this.#signBuileten(cipheredMessage),
             publicKey: this.publicKey
         }
         return message
     }
 
-    cipherBuileten(buileten: string, publicKeyToCipher: crypto.KeyObject) {
+    #cipherBuileten(buileten: string, publicKeyToCipher: crypto.KeyObject) {
         const data = buileten;
         const encryptedData = crypto.publicEncrypt(
         {
@@ -132,10 +263,10 @@ class Voter {
         },
         Buffer.from(data)
         );
-        return data;
+        return encryptedData;
     }
 
-    signBuileten(buileten: string) {
+    #signBuileten(buileten: string|Buffer) {
         const verifiableData = buileten;
         const signature = crypto.sign("sha256", Buffer.from(verifiableData), {
             key: this.privateKey,
@@ -143,12 +274,23 @@ class Voter {
           });
         return signature;
     }
+
+
 }
+
+
 
 function main() {
     let testListVoters: Voter[] = [
         new Voter("Maria"),
-        new Voter("Daryna")
+        new Voter("Daryna"),
+        new Voter("Dima"),
+        new Voter("Lana"),
+        new Voter("Ora"),
+        new Voter("Vera"),
+        new Voter("Lama"),
+        new Voter("Dana"),
+        new Voter("Egor"),
     ] 
 
     let testCandidates: Candidate[] = [
@@ -164,8 +306,10 @@ function main() {
         }
     ]
 
-    // Initialization of CVK
+    // Initialization of CVK and VKs
     let testCVK = new CVK(testListVoters, testCandidates);
+    let testVK1 = new VK();
+    let testVK2 = new VK();
     // generating of ID for Voters and Candidates
     testCVK.generateID();
 
@@ -179,13 +323,38 @@ function main() {
     });
 
     // each voter divide candidate's id into two separate builetens
-    testListVoters[0].separateId();
+    testListVoters.forEach((voter) => voter.separateId());
 
-    // each voter ciphers two builetens with public key from CVK
+    // CVK gives creates public keys for all voters
+    testCVK.createPublicKeys();
 
+    // Each voter receives their public key and proceed to ciphering their builetens
+    testListVoters.forEach((voter) => {
+        let pubKeys = testCVK.givePublicKeys(voter);
+        if (pubKeys) {
+            let message1 = voter.formMessage(pubKeys.pKey1, voter.buileten1);
+            let message2 = voter.formMessage(pubKeys.pKey2, voter.buileten2);
 
-    console.log(testListVoters[0].name, testListVoters[0].id);
-    console.log(testCandidates[0].name, testCandidates[0].id);
+            console.log(message1);
+            console.log(message2);
+            // VKs receiving their corresponding builetens
+            testVK1.receiveMessage(message1);
+            testVK2.receiveMessage(message2);
+        }
+    })
+
+    // VKs publish IDs and builetens
+    let part1 = testVK1.publishIDandBuiletens();
+    let part2 = testVK2.publishIDandBuiletens();
+
+    // CVK receives two parts of builetens from VKs
+    testCVK.receiveTwoParts(part1, part2);
+
+    // CVK deciphers all builetens
+    testCVK.decipherAllBuiletens();
+
+    // CVK gives  results
+    testCVK.results();
 }
 
 main();
